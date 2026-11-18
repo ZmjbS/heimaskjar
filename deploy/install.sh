@@ -67,14 +67,38 @@ for timer in "$REPO"/deploy/systemd/*.timer; do
 done
 
 say "Web server (Caddy, port $PORT)"
+# who is listening on a port, if anyone (process name, e.g. "apache2")
+listener() { ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'users:(("[^"]*' | head -1 | cut -d'"' -f2; }
+busy="$(listener "$PORT")"
+if [[ -n "$busy" && "$busy" != caddy ]]; then
+  echo "Port $PORT is already used by '$busy'. Choose another: HEIMASKJAR_PORT=8081 sudo $0" >&2
+  exit 1
+fi
 sed -e "s|@REPO@|$REPO|g" -e "s|@PORT@|$PORT|g" \
     "$REPO/deploy/caddy/heimaskjar.caddy" > /etc/caddy/heimaskjar.caddy
-if ! grep -qx 'import /etc/caddy/heimaskjar.caddy' /etc/caddy/Caddyfile; then
-  printf '\nimport /etc/caddy/heimaskjar.caddy\n' >> /etc/caddy/Caddyfile
+CF=/etc/caddy/Caddyfile
+# The Debian package's own Caddyfile serves a welcome page on port 80. If that's all it
+# does, replace it (keeping a copy): otherwise Caddy can't start while e.g. Apache has 80.
+stock() {   # the file minus comments, blank lines and our import line, on one line
+  sed -e 's/#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$CF" | grep -v '^$' |
+    grep -vx 'import /etc/caddy/heimaskjar.caddy' | tr '\n' '|'
+}
+if [[ "$(stock)" == ":80 {|root * /usr/share/caddy|file_server|}|" ]]; then
+  [[ -f "$CF.dist" ]] || cp "$CF" "$CF.dist"
+  printf '# Sites served by Caddy. The packaged original is in Caddyfile.dist.\nimport /etc/caddy/heimaskjar.caddy\n' > "$CF"
+  echo "Replaced the packaged welcome-page Caddyfile (copy kept as $CF.dist)."
+elif ! grep -qx 'import /etc/caddy/heimaskjar.caddy' "$CF"; then
+  printf '\nimport /etc/caddy/heimaskjar.caddy\n' >> "$CF"
 fi
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
-systemctl enable --now caddy
-systemctl reload caddy
+if grep -qE '^(:80|http://)' "$CF" && [[ -n "$(listener 80)" && "$(listener 80)" != caddy ]]; then
+  echo "Warning: your Caddyfile has a site on port 80, which '$(listener 80)' already uses." >&2
+fi
+caddy validate --config "$CF" --adapter caddyfile >/dev/null
+systemctl enable caddy
+if ! systemctl restart caddy; then
+  journalctl -u caddy -n 15 --no-pager >&2
+  exit 1
+fi
 
 say "Done"
 cat <<EOF
