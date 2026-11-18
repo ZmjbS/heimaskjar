@@ -73,7 +73,8 @@ done
 
 say "Web server (Caddy, port $PORT)"
 # who is listening on a port, if anyone (process name, e.g. "apache2")
-listener() { ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'users:(("[^"]*' | head -1 | cut -d'"' -f2; }
+# (|| true: a free port gives no match, which must not stop the script under pipefail)
+listener() { ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'users:(("[^"]*' | head -1 | cut -d'"' -f2 || true; }
 busy="$(listener "$PORT")"
 if [[ -n "$busy" && "$busy" != caddy ]]; then
   echo "Port $PORT is already used by '$busy'. Choose another: HEIMASKJAR_PORT=8081 sudo $0" >&2
@@ -111,6 +112,6 @@ Pages:     http://$(hostname).local:$PORT/   (or http://$(hostname -I | awk '{pr
 Settings:  $ETC/heimaskjar.toml
 Next run:  $(systemctl list-timers heimaskjar-vedur.timer --no-legend | awk '{print $1, $2, $3}')
 
-Make today's maps now:   sudo systemctl start heimaskjar-vedur
+Make today's maps now:   sudo systemctl start --no-block heimaskjar-vedur
 Follow it:               journalctl -u heimaskjar-vedur -f
 EOF
