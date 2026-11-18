@@ -1,0 +1,11 @@
+[Unit]
+Description=heimaskjar: weather maps every morning before 7
+
+[Timer]
+# 06:20 Iceland time. The 03 UTC model run is usually complete by then; if not,
+# the job uses the 00 UTC run. Persistent: if the Pi was off, run at next boot.
+OnCalendar=*-*-* 06:20:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,15 @@
+# generated output, downloads and local settings – never in git
+/data/
+/cache/
+/web/data
+/config/heimaskjar.toml
+.env
+*.tif
+*.grib2
+*.part
+
+# python
+__pycache__/
+*.pyc
+/venv/
+.venv/

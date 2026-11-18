@@ -1,0 +1,7 @@
+requests
+numpy
+matplotlib
+eccodes
+cartopy
+rasterio
+pyproj

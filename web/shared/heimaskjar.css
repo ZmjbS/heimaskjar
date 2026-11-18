@@ -1,0 +1,22 @@
+/* heimaskjar – styles shared by all pages. The colours follow the sun (set by HS.applySky). */
+:root { --bg: #e6edf3; --fg: #1d2530; --muted: #5b6673; --panel: #fff;
+        --card: rgba(255,255,255,.7); }
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body {
+  margin: 0; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg); color: var(--fg);
+  transition: background-color .45s linear, color .45s linear;
+}
+a { color: inherit; }
+header {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .2em 1.2em;
+  padding: .3em 1em .1em;
+}
+#clock { font-size: 2em; font-weight: 600; font-variant-numeric: tabular-nums; }
+#day { font-size: 1.1em; }
+#sun { font-size: 1.1em; color: var(--muted); }
+.home { text-decoration: none; color: var(--muted); font-size: 1.1em; }
+.home:hover { color: var(--fg); }
+footer { padding: 0 1em .4em; color: var(--muted); font-size: .75em; }
+.stale { color: #c0392b; font-weight: 600; }

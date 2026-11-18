@@ -1,0 +1,14 @@
+# heimaskjar web site – imported from /etc/caddy/Caddyfile by deploy/install.sh.
+# Plain http on the local network; the pages, plus the jobs' output under /data/.
+:@PORT@ {
+	handle_path /data/* {
+		root * /var/lib/heimaskjar/data
+		header Cache-Control "no-cache"
+		file_server
+	}
+	handle {
+		root * @REPO@/web
+		header Cache-Control "no-cache"
+		file_server
+	}
+}

@@ -1,0 +1,37 @@
+# heimaskjar settings. Copy to /etc/heimaskjar/heimaskjar.toml (on the Pi) or to
+# config/heimaskjar.toml (for trying it out on your own machine) and edit.
+# That copy is not in git, so names and paths here stay private.
+# Relative paths are relative to this file.
+
+[heimaskjar]
+title = "Heimaskjár"
+data_dir = "../data"      # pages read from here; on the Pi: /var/lib/heimaskjar/data
+cache_dir = "../cache"    # downloads and cut-outs;  on the Pi: /var/lib/heimaskjar/cache
+
+# Family members. Modules can tag their items with a person's id, and the
+# overview can then be filtered to show one person's things.
+[[people]]
+id = "a"
+name = "Anna"
+colour = "#d6453d"
+
+[[people]]
+id = "b"
+name = "Bjarni"
+colour = "#3b7fd0"
+
+[vedur]
+enabled = true
+# map areas, one set of maps each: hofudborg, hofudborg_vitt, sudvestur, island
+areas = ["hofudborg"]
+hours = "7-19"            # today's hours to show, Iceland time
+clouds = "layers"         # "layers" (low/mid/high in colours) or "total"
+coastline = true          # IS 50V coastline, downloaded once per area
+contours = true
+# ÍslandsDEM elevation file for the contours (download from
+# https://ftp.natt.is/gisdata/raster/IslandsDEMv1.0_50x50m_isn2016_zmasl.tif)
+dem_file = "../IslandsDEMv1.0_50x50m_isn2016_zmasl.tif"
+relief_file = ""          # optional shaded relief: the '_daylight.tif' file
+relief_strength = 0.6
+# place whose hourly forecast the overview card shows
+place = { name = "Reykjavík", lat = 64.146, lon = -21.94 }

@@ -1,0 +1,23 @@
+[Unit]
+Description=heimaskjar: today's weather maps
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=heimaskjar
+Group=heimaskjar
+WorkingDirectory=@REPO@
+Environment=HEIMASKJAR_CONFIG=/etc/heimaskjar/heimaskjar.toml
+Environment=HOME=/var/lib/heimaskjar
+Environment=MPLCONFIGDIR=/var/lib/heimaskjar/cache/matplotlib
+ExecStart=@REPO@/venv/bin/python -m heimaskjar.modules.vedur
+Nice=10
+TimeoutStartSec=45min
+
+# may only write its own data folder
+ProtectSystem=strict
+ReadWritePaths=/var/lib/heimaskjar
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true

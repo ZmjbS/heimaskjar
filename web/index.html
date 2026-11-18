@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="is">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heimaskjár</title>
+<link rel="stylesheet" href="shared/heimaskjar.css">
+<script src="shared/heimaskjar.js"></script>
+<style>
+  h1 { font-size: 1.1em; font-weight: 600; margin: 0; color: var(--muted); }
+  #people { display: flex; flex-wrap: wrap; gap: .4em; padding: .3em 1em .6em; }
+  #people button {
+    font: inherit; padding: .2em .9em; border-radius: 99px; cursor: pointer;
+    border: 2px solid var(--c, var(--muted)); background: transparent; color: inherit;
+  }
+  #people button.on { background: var(--c, var(--fg)); color: #fff; }
+  #people button.on.all { color: var(--bg); }
+
+  #cards { display: grid; gap: 12px; padding: 0 1em 1em;
+           grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+  .card {
+    display: block; text-decoration: none; color: inherit; background: var(--card);
+    border-radius: 8px; padding: .8em 1em; transition: background-color .45s linear;
+  }
+  .card:hover { outline: 2px solid var(--muted); }
+  .card h2 { margin: 0 0 .4em; font-size: 1.15em; display: flex; justify-content: space-between; }
+  .card h2 small { font-weight: 400; color: var(--muted); }
+  .muted { color: var(--muted); }
+
+  /* weather card */
+  .card.vedur { grid-column: span 2; }
+  @media (max-width: 760px) { .card.vedur { grid-column: auto; } }
+  .vedur .body { display: flex; flex-wrap: wrap; gap: 1em; align-items: flex-start; }
+  .vedur .now { min-width: 9em; }
+  .vedur .temp { font-size: 3em; font-weight: 600; line-height: 1; }
+  .vedur .line { margin-top: .3em; }
+  .vedur .chart { flex: 1 1 260px; min-width: 240px; }
+  .vedur .chart svg { width: 100%; height: auto; display: block; }
+  .vedur img { width: 100%; max-width: 420px; border-radius: 4px; display: block; }
+  .vedur .day { margin-top: .5em; }
+</style>
+</head>
+<body>
+<header>
+  <div id="clock">--:--</div>
+  <div id="day"></div>
+  <div id="sun"></div>
+  <h1 id="title" style="margin-left:auto">Heimaskjár</h1>
+</header>
+<div id="people"></div>
+<div id="cards"><div class="muted" style="padding:1em">Hleð…</div></div>
+<footer id="credit"></footer>
+
+<script>
+const DATA = "data/";
+const REFRESH_MIN = 10;
+let site = null, summaries = {};
+
+/* ---------- module cards: one function per module; unknown modules get a plain card ---------- */
+const CARDS = {
+  vedur(s, card) {
+    card.classList.add("vedur");
+    const hours = (s.hours || []).map(h => ({ ...h, t: new Date(h.time) }));
+    const now = new Date();
+    const today = hours.length && HS.sameDay(hours[0].t, now);
+    // the hour to show: this hour if it's in the forecast, else the nearest end of it
+    let i = hours.findIndex(h => h.t.getUTCHours() === now.getUTCHours());
+    if (!today || i < 0) i = now.getUTCHours() < (hours[0]?.t.getUTCHours() ?? 0) ? 0 : hours.length - 1;
+    const h = hours[i] || {};
+    const st = s.stats || {};
+    const compass = d => d == null ? "" :
+      ["N", "NA", "A", "SA", "S", "SV", "V", "NV"][Math.round(d / 45) % 8];
+    const kind = h.snow > .5 ? "snjór" : "úrkoma";
+    const thumb = s.thumbnail && h.t
+      ? `${DATA}vedur/${s.thumbnail.area}/${s.thumbnail.panel}_${HS.pad(h.t.getUTCHours())}.png?v=${encodeURIComponent(s.updated)}`
+      : null;
+    const first = hours[0]?.t, last = hours[hours.length - 1]?.t;
+    card.innerHTML = `
+      <h2>Veður · ${s.place || ""} <small>kl. ${h.t ? HS.pad(h.t.getUTCHours()) : "--"}</small></h2>
+      ${today ? "" : `<div class="stale">Spáin er fyrir ${first ? HS.dayName(first) : "?"}, ekki í dag.</div>`}
+      <div class="body">
+        <div class="now">
+          <div class="temp">${HS.num(h.temp)}°</div>
+          <div class="line">${HS.num(h.wind)} m/s ${compass(h.dir)}</div>
+          <div class="line">${h.precip ? `${kind} ${HS.num(h.precip, 1)} mm/klst` : "þurrt"}</div>
+          <div class="line muted">skýjað ${h.cloud == null ? "–" : Math.round(h.cloud * 8)}/8</div>
+        </div>
+        <div class="chart">${chart(hours, i)}</div>
+        ${thumb ? `<img src="${thumb}" alt="Úrkomukort kl. ${HS.pad(h.t.getUTCHours())}">` : ""}
+      </div>
+      <div class="day muted">
+        ${first ? `kl. ${HS.pad(first.getUTCHours())}–${HS.pad(last.getUTCHours())}:` : ""}
+        ${HS.num(st.temp_min)}° til ${HS.num(st.temp_max)}°
+        · úrkoma ${HS.num(st.precip_total, 1)} mm${st.snow_total ? ` (snjór ${HS.num(st.snow_total, 1)})` : ""}
+        · vindur mest ${HS.num(st.wind_max)} m/s
+      </div>`;
+  },
+};
+
+/* temperature line over rain bars, one column per hour; the shown hour is marked */
+function chart(hours, mark) {
+  if (!hours.length) return "";
+  const W = 320, H = 120, top = 14, bottom = 18, n = hours.length, cw = W / n;
+  const temps = hours.map(h => h.temp).filter(v => v != null);
+  let lo = Math.floor(Math.min(...temps) - 1), hi = Math.ceil(Math.max(...temps) + 1);
+  const y = t => top + (hi - t) / (hi - lo) * (H - top - bottom);
+  const rainMax = Math.max(2, ...hours.map(h => h.precip || 0));     // 2 mm/h fills the box
+  const bars = hours.map((h, k) => {
+    const r = (h.precip || 0) / rainMax * (H - top - bottom);
+    const col = h.snow > .5 ? "#9db7d6" : "#3b8bd0";
+    return r > .5 ? `<rect x="${k * cw + 2}" y="${H - bottom - r}" width="${cw - 4}" height="${r}" fill="${col}" opacity=".75"/>` : "";
+  }).join("");
+  const pts = hours.map((h, k) => h.temp == null ? null : `${k * cw + cw / 2},${y(h.temp)}`).filter(Boolean);
+  const labels = hours.map((h, k) => k % 2 ? "" :
+    `<text x="${k * cw + cw / 2}" y="${H - 4}" text-anchor="middle" font-size="10" fill="currentColor" opacity=".6">${HS.pad(h.t.getUTCHours())}</text>`).join("");
+  const zero = lo < 0 && hi > 0
+    ? `<line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="currentColor" stroke-dasharray="3 3" opacity=".35"/>` : "";
+  const m = hours[mark];
+  const marker = m ? `<rect x="${mark * cw}" y="${top - 12}" width="${cw}" height="${H - top - bottom + 12}" fill="currentColor" opacity=".08"/>` : "";
+  const tlabel = (v, k) => v == null ? "" :
+    `<text x="${k * cw + cw / 2}" y="${y(v) - 5}" text-anchor="middle" font-size="10" fill="#d6453d">${HS.num(v)}°</text>`;
+  const kmax = hours.findIndex(h => h.temp === Math.max(...temps));
+  const kmin = hours.findIndex(h => h.temp === Math.min(...temps));
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Hiti og úrkoma eftir klukkutímum">
+    ${marker}${zero}${bars}
+    <polyline points="${pts.join(" ")}" fill="none" stroke="#d6453d" stroke-width="2"/>
+    ${tlabel(hours[kmax]?.temp, kmax)}${kmin !== kmax ? tlabel(hours[kmin]?.temp, kmin) : ""}
+    ${labels}</svg>`;
+}
+
+function plainCard(s, card) {
+  card.innerHTML = `<h2>${s.title || s.module}</h2>
+    <div class="muted">uppfært ${s.updated ? HS.hhmm(new Date(s.updated)) : "–"}</div>`;
+}
+
+/* ---------- family filter ---------- */
+function drawPeople() {
+  const box = document.getElementById("people");
+  const people = site?.people || [];
+  if (!people.length) { box.innerHTML = ""; return; }
+  const cur = HS.person();
+  box.innerHTML = [`<button data-p="" class="all ${cur ? "" : "on"}">Öll</button>`]
+    .concat(people.map(p => `<button data-p="${p.id}" class="${cur === p.id ? "on" : ""}"
+      style="--c:${p.colour || "var(--fg)"}">${p.name}</button>`)).join("");
+  box.querySelectorAll("button").forEach(b => b.onclick = () => {
+    const url = new URL(location);
+    url.searchParams.set("person", b.dataset.p);
+    history.replaceState(null, "", url);
+    HS.person();                     // remember it
+    drawPeople(); drawCards();
+  });
+}
+
+/* ---------- cards ---------- */
+function drawCards() {
+  const box = document.getElementById("cards");
+  box.innerHTML = "";
+  const cur = HS.person();
+  const credits = [];
+  for (const m of site?.modules || []) {
+    const s = summaries[m.id];
+    if (!s) continue;
+    // a module whose summary names people is hidden when someone else is chosen
+    if (cur && Array.isArray(s.people) && !s.people.includes(cur)) continue;
+    const card = document.createElement("a");
+    card.className = "card";
+    card.href = HS.link(m.page);
+    (CARDS[m.id] || plainCard)(s, card);
+    box.appendChild(card);
+    if (s.credit) credits.push(s.credit);
+  }
+  if (!box.children.length) box.innerHTML = `<div class="muted" style="padding:1em">Engin gögn enn.</div>`;
+  document.getElementById("credit").textContent = credits.join(" · ");
+}
+
+async function load() {
+  try {
+    site = await HS.json(DATA + "site.json");
+  } catch (e) {
+    document.getElementById("cards").innerHTML =
+      `<div class="stale" style="padding:1em">Fann ekki ${DATA}site.json – hefur verkið keyrt? (${e.message})</div>`;
+    return;
+  }
+  document.getElementById("title").textContent = site.title || "Heimaskjár";
+  document.title = site.title || "Heimaskjár";
+  await Promise.all((site.modules || []).map(async m => {
+    try { summaries[m.id] = await HS.json(DATA + m.summary); } catch (e) { delete summaries[m.id]; }
+  }));
+  drawPeople();
+  drawCards();
+}
+
+/* ---------- live clock; the page colour follows the real sun ---------- */
+function tick() {
+  const now = new Date();
+  document.getElementById("clock").textContent = HS.hhmm(now);
+  document.getElementById("day").textContent = HS.dayName(now);
+  HS.applySky(now);
+}
+let lastHour = new Date().getUTCHours();
+setInterval(() => {
+  tick();
+  const h = new Date().getUTCHours();
+  if (h !== lastHour) { lastHour = h; drawCards(); }       // move the cards on to the new hour
+}, 10e3);
+tick();
+load();
+setInterval(load, REFRESH_MIN * 60e3);
+</script>
+</body>
+</html>

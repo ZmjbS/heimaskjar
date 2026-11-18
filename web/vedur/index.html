@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="is">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Veðurspá – Heimaskjár</title>
+<link rel="stylesheet" href="../shared/heimaskjar.css">
+<script src="../shared/heimaskjar.js"></script>
+<style>
+  body { display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; }
+  #areas { margin-left: auto; display: flex; gap: .8em; }
+  #areas label { cursor: pointer; }
+
+  /* time bar: one segment per hour, coloured by how high the sun is */
+  #bar { position: relative; display: flex; height: 20px; margin: .1em 1em .4em; flex: none;
+         border-radius: 4px; overflow: hidden; cursor: pointer; }
+  #bar span { flex: 1; border-right: 1px solid rgba(0,0,0,.08); font-size: 11px;
+              display: flex; align-items: center; justify-content: center; color: rgba(0,0,0,.55); }
+  #bar span.night { color: rgba(255,255,255,.7); }
+  #bar span.now { outline: 3px solid var(--fg); outline-offset: -3px; font-weight: 700; }
+
+  /* the panel grid fills whatever height is left; fit() picks columns and size */
+  #panels { flex: 1 0 auto; display: grid; gap: 6px; padding: 0 1em;
+            justify-content: center; align-content: center; }
+  #panels img { width: 100%; height: auto; display: block; background: var(--panel);
+                border-radius: 3px; }
+
+  #controls { display: flex; align-items: center; gap: .8em; padding: .3em 1em; flex: none; }
+  #controls button { font: inherit; padding: .25em .9em; border-radius: 4px;
+                     border: 1px solid var(--muted); background: transparent; color: inherit;
+                     cursor: pointer; }
+  #slider { flex: 1; }
+  #hint { color: var(--muted); font-size: .85em; }
+  footer { flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #loading { padding: 2em 1em; }
+</style>
+</head>
+<body>
+<header>
+  <a class="home" id="home" href="../" title="Heimaskjár">←</a>
+  <div id="clock">--:--</div>
+  <div id="day"></div>
+  <div id="sun"></div>
+  <div id="areas"></div>
+</header>
+<div id="bar"></div>
+<div id="loading" style="flex:none">Hleð spá…</div>
+<div id="panels"></div>
+<div id="controls">
+  <button id="play" title="Bil (space)">⏸</button>
+  <input id="slider" type="range" min="0" max="0" value="0">
+  <span id="hint">bil: stöðva/spila · ←/→: klukkutími</span>
+</div>
+<footer><span id="stale" class="stale"></span> <span id="meta"></span> · <span id="credit"></span></footer>
+
+<script>
+/* Settings – can also be given in the address, e.g. index.html?panels=sky,urkoma&cols=1&area=hofudborg */
+const params = new URLSearchParams(location.search);
+const DATA = params.get("data") || "../data/vedur/";   // folder with manifest.json
+const FRAME_MS = +params.get("ms") || 600;        // time per hour
+const HOLD_MS = +params.get("hold") || 1200;      // extra pause on the last hour
+const REFRESH_MIN = 20;                            // look for a new forecast this often
+let manifest = null, area = null, hours = [], imgs = [], idx = 0, playing = true, timer = null;
+
+const { sunElevation, skyColour, applySky, DAYS, MONTHS } = HS;
+
+/* ---- arrange panels: try 1..n columns, keep the one giving the biggest panels ---- */
+let aspect = 770 / 522;                       // width/height of a panel image; updated on load
+function fit() {
+  const box = document.getElementById("panels");
+  const n = box.children.length;
+  if (!n) return;
+  const gap = 6, padX = 32;
+  const W = document.documentElement.clientWidth - padX;
+  // height left for the grid = window minus everything else on the page
+  const others = ["header", "#bar", "#controls", "footer"]
+    .reduce((h, q) => h + document.querySelector(q).getBoundingClientRect().height, 0);
+  const H = window.innerHeight - others - 8;
+  let best = null;
+  const forced = +params.get("cols");
+  for (let cols = 1; cols <= n; cols++) {
+    if (forced && cols !== forced) continue;
+    const rows = Math.ceil(n / cols);
+    const w = Math.min((W - gap * (cols - 1)) / cols, (H - gap * (rows - 1)) / rows * aspect);
+    if (!best || w > best.w + 1) best = { cols, w };
+  }
+  // on a narrow screen (phone) squeezing everything in makes the maps tiny:
+  // use the full width in one column and let the page scroll instead
+  if (!forced && best.w < Math.min(320, W * .75)) best = { cols: 1, w: W };
+  box.style.gridTemplateColumns = `repeat(${best.cols}, ${Math.floor(best.w)}px)`;
+}
+window.addEventListener("resize", fit);
+
+/* ---- show one hour ---- */
+function show(i) {
+  idx = (i + hours.length) % hours.length;
+  const d = hours[idx];
+  imgs.forEach(row => row.el.src = row.frames[idx].src);
+  document.getElementById("clock").textContent =
+    "kl. " + String(d.getUTCHours()).padStart(2, "0") + ":00";
+  document.getElementById("day").textContent =
+    `${DAYS[d.getUTCDay()]} ${d.getUTCDate()}. ${MONTHS[d.getUTCMonth()]}`;
+  document.getElementById("slider").value = idx;
+  document.querySelectorAll("#bar span").forEach((s, k) => s.classList.toggle("now", k === idx));
+  applySky(d);
+}
+
+function tick() {
+  show(idx + 1);
+  timer = setTimeout(tick, idx === hours.length - 1 ? FRAME_MS + HOLD_MS : FRAME_MS);
+}
+function play(on) {
+  playing = on;
+  clearTimeout(timer);
+  document.getElementById("play").textContent = on ? "⏸" : "▶";
+  if (on) timer = setTimeout(tick, FRAME_MS);
+}
+
+/* ---- build the page for an area; start once every image has loaded ---- */
+function build() {
+  play(false);
+  const panelIds = (params.get("panels") || manifest.panels.map(p => p.id).join(",")).split(",");
+  const box = document.getElementById("panels");
+  box.innerHTML = "";
+
+  const path = DATA + manifest.areas[area].path + "/";
+  const stamp = "?v=" + encodeURIComponent(manifest.generated);   // new forecast → new images
+  let pending = 0;
+  const loading = document.getElementById("loading");
+  imgs = panelIds.filter(id => manifest.panels.some(p => p.id === id)).map(id => {
+    const el = document.createElement("img");
+    el.alt = manifest.panels.find(p => p.id === id).title;
+    box.appendChild(el);
+    const frames = hours.map(d => {
+      const im = new Image();
+      pending++;
+      im.onload = im.onerror = () => {
+        if (im.naturalWidth && im.naturalHeight) aspect = im.naturalWidth / im.naturalHeight;
+        if (--pending === 0) { loading.style.display = "none"; show(0); fit(); play(true); }
+        else loading.textContent = `Hleð spá… ${pending} myndir eftir`;
+      };
+      im.src = path + id + "_" + String(d.getUTCHours()).padStart(2, "0") + ".png" + stamp;
+      return im;
+    });
+    return { el, frames };
+  });
+  loading.style.display = "";
+
+  const bar = document.getElementById("bar");
+  bar.innerHTML = "";
+  hours.forEach((d, k) => {
+    const s = document.createElement("span"), el = sunElevation(d);
+    s.style.background = skyColour(el);
+    if (el < -1) s.className = "night";
+    s.textContent = String(d.getUTCHours()).padStart(2, "0");
+    s.onclick = () => { play(false); show(k); };
+    bar.appendChild(s);
+  });
+  document.getElementById("slider").max = hours.length - 1;
+  fit();
+}
+
+async function load(first) {
+  let m;
+  try {
+    m = await (await fetch(DATA + "manifest.json?" + Date.now())).json();
+  } catch (e) {
+    if (first) document.getElementById("loading").textContent = "Fann enga spá (" + e + ")";
+    return;
+  }
+  if (!first && manifest && m.generated === manifest.generated) return;   // nothing new
+  manifest = m;
+  hours = m.hours.map(h => new Date(h));
+  const names = { hofudborg: "Höfuðborgarsvæðið", hofudborg_vitt: "Höfuðborgarsvæðið (vítt)",
+                  sudvestur: "Suðvesturland", island: "Ísland" };
+  const keys = Object.keys(m.areas);
+  area = keys.includes(area) ? area : (keys.includes(params.get("area")) ? params.get("area") : keys[0]);
+  const ab = document.getElementById("areas");
+  ab.innerHTML = keys.length < 2 ? "" : keys.map(k =>
+    `<label><input type="radio" name="area" value="${k}" ${k === area ? "checked" : ""}> ${names[k] || k}</label>`
+  ).join("");
+  const showCredit = () => document.getElementById("credit").textContent =
+    (m.areas[area] && m.areas[area].credit) || m.credit || "";
+  ab.querySelectorAll("input").forEach(r => r.onchange = () => { area = r.value; showCredit(); build(); });
+
+  const run = new Date(m.run);
+  document.getElementById("meta").textContent =
+    `HARMONIE IG, keyrsla ${run.getUTCDate()}.${run.getUTCMonth() + 1}. kl. ${String(run.getUTCHours()).padStart(2, "0")} UTC`;
+  showCredit();
+  const today = new Date();
+  document.getElementById("stale").textContent =
+    hours.length && hours[0].toISOString().slice(0, 10) !== today.toISOString().slice(0, 10)
+      ? `Athugið: spáin gildir fyrir ${hours[0].getUTCDate()}.${hours[0].getUTCMonth() + 1}., ekki í dag.` : "";
+  build();
+}
+
+document.getElementById("play").onclick = () => play(!playing);
+document.getElementById("slider").oninput = e => { play(false); show(+e.target.value); };
+document.addEventListener("keydown", e => {
+  if (e.key === " ") { e.preventDefault(); play(!playing); }
+  else if (e.key === "ArrowRight") { play(false); show(idx + 1); }
+  else if (e.key === "ArrowLeft") { play(false); show(idx - 1); }
+});
+document.getElementById("home").href = HS.link("../");
+load(true);
+setInterval(() => load(false), REFRESH_MIN * 60e3);
+</script>
+</body>
+</html>
