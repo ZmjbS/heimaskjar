@@ -5,4 +5,5 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 git pull --ff-only
-sudo SKIP_DEM="${SKIP_DEM:-0}" HEIMASKJAR_PORT="${HEIMASKJAR_PORT:-8080}" "$REPO/deploy/install.sh"
+# pass the port only if given; otherwise install.sh keeps the one used last time
+sudo SKIP_DEM="${SKIP_DEM:-0}" ${HEIMASKJAR_PORT:+HEIMASKJAR_PORT="$HEIMASKJAR_PORT"} "$REPO/deploy/install.sh"

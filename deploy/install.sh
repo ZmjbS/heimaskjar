@@ -3,12 +3,17 @@
 # Run from the cloned repository:   sudo deploy/install.sh
 # Safe to run again; deploy/update.sh does that after a git pull.
 #
-#   HEIMASKJAR_PORT   web port (default 8080)
+#   HEIMASKJAR_PORT   web port (default: the one used last time, else 8080). Give it
+#                     after sudo, which drops variables set before it:
+#                     sudo HEIMASKJAR_PORT=80 deploy/install.sh
 #   SKIP_DEM=1        don't download the elevation file
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PORT="${HEIMASKJAR_PORT:-8080}"
+# the port from last time, read back from the installed Caddy site
+last_port() { sed -n 's/^:\([0-9]\+\) *{.*/\1/p' /etc/caddy/heimaskjar.caddy 2>/dev/null | head -1; }
+PORT="${HEIMASKJAR_PORT:-$(last_port)}"
+PORT="${PORT:-8080}"
 VAR=/var/lib/heimaskjar
 ETC=/etc/heimaskjar
 DEM_NAME=IslandsDEMv1.0_50x50m_isn2016_zmasl.tif

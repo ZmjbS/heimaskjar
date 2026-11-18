@@ -63,8 +63,9 @@ sudo deploy/install.sh
 `install.sh` installs Caddy and Python's venv, creates a `heimaskjar` system user,
 `/var/lib/heimaskjar/` for data and `/etc/heimaskjar/heimaskjar.toml` for settings,
 downloads the elevation file (118 MB), sets up the Python environment, installs and
-starts the systemd timer (06:20 every day), and serves the pages on port 8080
-(`HEIMASKJAR_PORT=… sudo deploy/install.sh` for another).
+starts the systemd timer (06:20 every day), and serves the pages on port 8080.
+For another port: `sudo HEIMASKJAR_PORT=80 deploy/install.sh` (after `sudo`, which
+drops variables set before it). Later runs and updates keep the port used last time.
 
 Then:
 
