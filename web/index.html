@@ -62,10 +62,11 @@ const CARDS = {
     card.classList.add("vedur");
     const hours = (s.hours || []).map(h => ({ ...h, t: new Date(h.time) }));
     const now = new Date();
-    const today = hours.length && HS.sameDay(hours[0].t, now);
-    // the hour to show: this hour if it's in the forecast, else the nearest end of it
-    let i = hours.findIndex(h => h.t.getUTCHours() === now.getUTCHours());
-    if (!today || i < 0) i = now.getUTCHours() < (hours[0]?.t.getUTCHours() ?? 0) ? 0 : hours.length - 1;
+    const ahead = hours.length ? HS.daysFromToday(hours[0].t, now) : 0;   // 0 today, 1 tomorrow
+    // the hour to show: today, this hour (or the nearest end of the day's forecast);
+    // tomorrow, the first hour – the morning is what you plan for the evening before
+    let i = ahead === 0 ? hours.findIndex(h => h.t.getUTCHours() === now.getUTCHours()) : 0;
+    if (i < 0) i = now.getUTCHours() < (hours[0]?.t.getUTCHours() ?? 0) ? 0 : hours.length - 1;
     const h = hours[i] || {};
     const st = s.stats || {};
     const compass = d => d == null ? "" :
@@ -76,8 +77,8 @@ const CARDS = {
       : null;
     const first = hours[0]?.t, last = hours[hours.length - 1]?.t;
     card.innerHTML = `
-      <h2>Veður · ${s.place || ""} <small>kl. ${h.t ? HS.pad(h.t.getUTCHours()) : "--"}</small></h2>
-      ${today ? "" : `<div class="stale">Spáin er fyrir ${first ? HS.dayName(first) : "?"}, ekki í dag.</div>`}
+      <h2>Veður · ${s.place || ""} <small>${ahead === 1 ? "á morgun " : ""}kl. ${h.t ? HS.pad(h.t.getUTCHours()) : "--"}</small></h2>
+      ${ahead < 0 ? `<div class="stale">Gömul spá (${first ? HS.dayName(first) : "?"}).</div>` : ""}
       <div class="body">
         <div class="now">
           <div class="temp">${HS.num(h.temp)}°</div>
@@ -89,7 +90,8 @@ const CARDS = {
         ${thumb ? `<img src="${thumb}" alt="Úrkomukort kl. ${HS.pad(h.t.getUTCHours())}">` : ""}
       </div>
       <div class="day muted">
-        ${first ? `kl. ${HS.pad(first.getUTCHours())}–${HS.pad(last.getUTCHours())}:` : ""}
+        ${first ? `${ahead === 0 ? "Í dag" : ahead === 1 ? "Á morgun" : HS.dayName(first)}
+                   kl. ${HS.pad(first.getUTCHours())}–${HS.pad(last.getUTCHours())}:` : ""}
         ${HS.num(st.temp_min)}° til ${HS.num(st.temp_max)}°
         · úrkoma ${HS.num(st.precip_total, 1)} mm${st.snow_total ? ` (snjór ${HS.num(st.snow_total, 1)})` : ""}
         · vindur mest ${HS.num(st.wind_max)} m/s

@@ -68,7 +68,8 @@ for unit in "$REPO"/deploy/systemd/*.service "$REPO"/deploy/systemd/*.timer; do
 done
 systemctl daemon-reload
 for timer in "$REPO"/deploy/systemd/*.timer; do
-  systemctl enable --now "$(basename "$timer")"
+  systemctl enable "$(basename "$timer")"
+  systemctl restart "$(basename "$timer")"     # a running timer only picks up a new schedule on restart
 done
 
 say "Web server (Caddy, port $PORT)"
@@ -110,7 +111,7 @@ say "Done"
 cat <<EOF
 Pages:     http://$(hostname).local:$PORT/   (or http://$(hostname -I | awk '{print $1}'):$PORT/)
 Settings:  $ETC/heimaskjar.toml
-Next run:  $(systemctl list-timers heimaskjar-vedur.timer --no-legend | awk '{print $1, $2, $3}')
+Next run:  $(systemctl list-timers heimaskjar-vedur.timer --no-legend | awk '{print $1, $2, $3}')   (06:20 today's maps, 18:20 tomorrow's)
 
 Make today's maps now:   sudo systemctl start --no-block heimaskjar-vedur
 Follow it:               journalctl -u heimaskjar-vedur -f

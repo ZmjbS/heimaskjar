@@ -63,6 +63,12 @@ const HS = (() => {
   const hhmm = d => pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes());
   const dayName = d => `${DAYS[d.getUTCDay()]} ${d.getUTCDate()}. ${MONTHS[d.getUTCMonth()]}`;
   const sameDay = (a, b) => a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
+  /* whole days from today to d: 0 today, 1 tomorrow, -1 yesterday */
+  const daysFromToday = (d, now = new Date()) =>
+    Math.round((Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) -
+                Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())) / 864e5);
+  /* "í dag", "á morgun" or the date */
+  const whichDay = d => ({ 0: "í dag", 1: "á morgun" })[daysFromToday(d)] ?? dayName(d);
   /* number with an Icelandic decimal comma */
   const num = (v, digits = 0) => v == null ? "–" :
     Number(v).toFixed(digits).replace(".", ",").replace(/^-0(,0+)?$/, "0$1");
@@ -87,5 +93,5 @@ const HS = (() => {
   }
 
   return { LAT, LON, DAYS, MONTHS, sunElevation, skyColour, applySky,
-           pad, hhmm, dayName, sameDay, num, person, link, json };
+           pad, hhmm, dayName, sameDay, daysFromToday, whichDay, num, person, link, json };
 })();

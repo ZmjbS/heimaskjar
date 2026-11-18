@@ -187,10 +187,12 @@ async function load(first) {
   document.getElementById("meta").textContent =
     `HARMONIE IG, keyrsla ${run.getUTCDate()}.${run.getUTCMonth() + 1}. kl. ${String(run.getUTCHours()).padStart(2, "0")} UTC`;
   showCredit();
-  const today = new Date();
-  document.getElementById("stale").textContent =
-    hours.length && hours[0].toISOString().slice(0, 10) !== today.toISOString().slice(0, 10)
-      ? `Athugið: spáin gildir fyrir ${hours[0].getUTCDate()}.${hours[0].getUTCMonth() + 1}., ekki í dag.` : "";
+  // only an old forecast is a warning; tomorrow's is just labelled
+  const ahead = hours.length ? HS.daysFromToday(hours[0]) : 0;
+  const note = document.getElementById("stale");
+  note.textContent = ahead < 0 ? `Gömul spá (${HS.dayName(hours[0])}).` :
+                     ahead === 1 ? "Spá fyrir morgundaginn." : "";
+  note.className = ahead < 0 ? "stale" : "";
   build();
 }
 

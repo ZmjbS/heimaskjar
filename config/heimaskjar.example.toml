@@ -24,7 +24,8 @@ colour = "#3b7fd0"
 enabled = true
 # map areas, one set of maps each: hofudborg, hofudborg_vitt, sudvestur, island
 areas = ["hofudborg"]
-hours = "7-19"            # today's hours to show, Iceland time
+hours = "7-19"            # hours to show, Iceland time
+switch_hour = 12          # runs from this hour on make tomorrow's maps instead of today's
 clouds = "layers"         # "layers" (low/mid/high in colours) or "total"
 coastline = true          # IS 50V coastline, downloaded once per area
 contours = true

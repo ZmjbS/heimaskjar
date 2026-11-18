@@ -4,7 +4,8 @@ A home dashboard for the family: an overview screen with one card per *module*, 
 opening a detailed view, filterable by family member. Runs on a Raspberry Pi on the
 local network.
 
-The first module is **Veður** (weather): today's 07–19 forecast for the capital area
+The first module is **Veður** (weather): the 07–19 forecast for the capital area
+(today's in the morning, tomorrow's from the evening before)
 as synchronised looping maps of cloud layers, precipitation, temperature and wind,
 drawn from the HARMONIE IG weather model.
 
@@ -63,7 +64,8 @@ sudo deploy/install.sh
 `install.sh` installs Caddy and Python's venv, creates a `heimaskjar` system user,
 `/var/lib/heimaskjar/` for data and `/etc/heimaskjar/heimaskjar.toml` for settings,
 downloads the elevation file (118 MB), sets up the Python environment, installs and
-starts the systemd timer (06:20 every day), and serves the pages on port 8080.
+starts the systemd timer (06:20 and 18:20 every day: today's maps in the morning,
+tomorrow's in the evening), and serves the pages on port 8080.
 For another port: `sudo HEIMASKJAR_PORT=80 deploy/install.sh` (after `sudo`, which
 drops variables set before it). Later runs and updates keep the port used last time.
 

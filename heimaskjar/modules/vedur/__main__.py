@@ -1,6 +1,7 @@
 """Daily weather job: python -m heimaskjar.modules.vedur [--config FILE]
 
-Renders today's forecast maps (hours from the settings) into <data_dir>/vedur/,
+Renders the forecast maps (hours from the settings) into <data_dir>/vedur/ – today's
+before switch_hour (default 12), tomorrow's after it –
 writes summary.json for the overview card, and refreshes <data_dir>/site.json.
 """
 import argparse
@@ -44,7 +45,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", help="settings file (default: see README)")
-    ap.add_argument("--day", help="YYYY-MM-DD instead of today")
+    ap.add_argument("--day", help="YYYY-MM-DD instead of today/tomorrow")
     ap.add_argument("--grib-dir", help=argparse.SUPPRESS)        # testing: local GRIB files
     a = ap.parse_args()
 
@@ -63,7 +64,13 @@ def main():
     cache.mkdir(parents=True, exist_ok=True)
     dem = cfg.path_of(m.get("dem_file"))
     relief = cfg.path_of(m.get("relief_file"))
-    day = dt.date.fromisoformat(a.day) if a.day else None
+    if a.day:
+        day = dt.date.fromisoformat(a.day)
+    else:
+        # before switch_hour: today's forecast; from then on: tomorrow's (Iceland = UTC)
+        now = dt.datetime.now(dt.timezone.utc)
+        day = now.date() + dt.timedelta(days=int(now.hour >= int(m.get("switch_hour", 12))))
+    print(f"Forecast for {day} ({first:02d}–{last:02d})", file=sys.stderr)
 
     kort.batch(str(out), str(cache), areas, first, last, day=day, grib_dir=a.grib_dir,
                point=m.get("place", {"name": "Reykjavík", "lat": 64.146, "lon": -21.94}),
